@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#06c755">
+    <title>LINE LIFF QR Code 掃描</title>
+    <link rel="stylesheet" href="./style.css">
+  </head>
+  <body>
+    <main class="app-container">
+      <header class="page-header">
+        <p class="eyebrow">LINE LIFF</p>
+        <h1>QR Code 掃描</h1>
+        <p>取得 LINE 使用者資料並掃描 QR Code。</p>
+      </header>
+
+      <section class="card" aria-labelledby="profile-title">
+        <h2 id="profile-title">LINE 使用者資訊</h2>
+        <dl class="profile-list">
+          <div>
+            <dt>LINE User ID</dt>
+            <dd id="line-user-id">讀取中...</dd>
+          </div>
+          <div>
+            <dt>LINE Name</dt>
+            <dd id="line-name">讀取中...</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="card" aria-labelledby="scanner-title">
+        <h2 id="scanner-title">QR Code Scanner</h2>
+        <div class="button-stack">
+          <button id="scan-liff-button" type="button">使用 LIFF 掃描 QR Code</button>
+          <button id="scan-camera-button" type="button" class="secondary">使用 HTML Camera 掃描</button>
+          <button id="stop-camera-button" type="button" class="ghost" disabled>停止相機</button>
+        </div>
+        <div id="reader" aria-label="QR Code 相機掃描區域"></div>
+      </section>
+
+      <section class="card" aria-labelledby="result-title">
+        <h2 id="result-title">QR Code Value</h2>
+        <p id="qr-code-value" class="qr-value">尚未掃描</p>
+        <button id="submit-button" type="button">送出資料</button>
+      </section>
+
+      <p id="message" class="message" role="status" aria-live="polite" hidden></p>
+    </main>
+
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
