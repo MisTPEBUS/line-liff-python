@@ -112,6 +112,17 @@ async function scanWithHtmlCamera() {
       throw new Error("html5-qrcode SDK 尚未載入");
     }
 
+    if (!window.isSecureContext) {
+      throw new Error("相機只能在 HTTPS 安全連線中使用");
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error("目前瀏覽器不支援相機存取");
+    }
+
+    const readerElement = document.querySelector("#reader");
+    readerElement.classList.add("is-scanning");
+
     html5QrCode = new Html5Qrcode("reader");
     isHtmlScannerRunning = true;
     updateScannerButtons();
@@ -138,10 +149,34 @@ async function scanWithHtmlCamera() {
   } catch (error) {
     console.error("HTML Camera 啟動失敗：", error);
     isHtmlScannerRunning = false;
+    document.querySelector("#reader").classList.remove("is-scanning");
     await clearHtmlScanner();
     updateScannerButtons();
-    showMessage("無法啟動相機，請確認瀏覽器權限與 HTTPS 連線。", true);
+    showMessage(getCameraErrorMessage(error), true);
   }
+}
+
+function getCameraErrorMessage(error) {
+  const errorName = error && typeof error === "object" ? error.name : "";
+  const errorMessage = error instanceof Error ? error.message : String(error || "未知錯誤");
+
+  if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
+    return "無法啟動相機：相機權限被拒絕，請到手機設定允許 LINE 或瀏覽器使用相機。";
+  }
+
+  if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+    return "無法啟動相機：找不到可用的相機鏡頭。";
+  }
+
+  if (errorName === "NotReadableError" || errorName === "TrackStartError") {
+    return "無法啟動相機：鏡頭可能正被其他 App 使用，請關閉其他相機程式後重試。";
+  }
+
+  if (errorName === "OverconstrainedError" || errorName === "ConstraintNotSatisfiedError") {
+    return "無法啟動後置鏡頭：目前裝置不支援要求的相機設定。";
+  }
+
+  return `無法啟動相機：${errorMessage}`;
 }
 
 async function stopHtmlScanner(showStoppedMessage = true) {
@@ -176,6 +211,7 @@ async function clearHtmlScanner() {
     console.error("清除 HTML Camera 資源失敗：", error);
   } finally {
     html5QrCode = null;
+    document.querySelector("#reader").classList.remove("is-scanning");
   }
 }
 

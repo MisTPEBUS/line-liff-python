@@ -141,11 +141,22 @@ button:disabled {
   border-radius: 12px;
 }
 
-#reader:empty {
-  display: none;
+#reader.is-scanning {
+  min-height: 280px;
+  background: #111;
+}
+
+#reader__scan_region {
+  width: 100% !important;
+  min-height: 280px !important;
 }
 
 #reader video {
+  display: block !important;
+  width: 100% !important;
+  min-height: 280px !important;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
   border-radius: 12px;
 }
 
