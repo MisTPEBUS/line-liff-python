@@ -121,7 +121,4 @@ async def receive_line_webhook(payload: WebhookRequest) -> ApiResponse:
     return ApiResponse(status="success", message="Webhook 接收成功")
 
 
-# POC 安全性說明：目前 QR Code API 的使用者資料及 Webhook 來源皆未驗證。
-# 正式版本處理事件前，必須使用未經修改的原始 request body、
-# LINE Channel Secret 與 x-line-signature 驗證 Webhook 來源。
 

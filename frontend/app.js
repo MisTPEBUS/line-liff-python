@@ -12,6 +12,8 @@ const state = {
 let html5QrCode = null;
 let isHtmlScannerRunning = false;
 let isQrCodeDetected = false;
+let barcodeDetector = null;
+let barcodeDetectionTimer = null;
 
 const elements = {};
 
@@ -115,6 +117,9 @@ async function scanWithHtmlCamera() {
   }
 
   try {
+    // 開啟相機不應清除上一次結果；LIFF WebView 重繪後也從 state 恢復顯示。
+    renderQrCodeValue();
+
     if (typeof Html5Qrcode === "undefined") {
       throw new Error("html5-qrcode SDK 尚未載入");
     }
@@ -156,7 +161,10 @@ async function scanWithHtmlCamera() {
       },
     );
 
+    await enableContinuousAutoFocus();
+    await startQrPositionTracking(readerElement);
     showMessage("相機已啟動，請將 QR Code 對準掃描框。", false);
+    renderQrCodeValue();
     readerElement.scrollIntoView({ behavior: "smooth", block: "center" });
   } catch (error) {
     console.error("HTML Camera 啟動失敗：", error);
@@ -179,10 +187,134 @@ async function handleHtmlQrCodeDetected(decodedText) {
   }
 
   isQrCodeDetected = true;
+  showFallbackDetectedFrame();
   showMessage("已偵測到 QR Code，正在關閉相機...", false);
 
+  await delay(250);
   await stopHtmlScanner(false);
   setQrCodeValue(qrCodeValue);
+}
+
+async function enableContinuousAutoFocus() {
+  try {
+    const capabilities = html5QrCode.getRunningTrackCapabilities();
+    const focusModes = capabilities.focusMode;
+
+    if (Array.isArray(focusModes) && focusModes.includes("continuous")) {
+      await html5QrCode.applyVideoConstraints({
+        advanced: [{ focusMode: "continuous" }],
+      });
+    }
+  } catch (error) {
+    // 部分 iOS/LINE WebView 不提供 focusMode，維持裝置預設自動對焦即可。
+    console.info("目前裝置不支援手動設定連續對焦：", error);
+  }
+}
+
+async function startQrPositionTracking(readerElement) {
+  if (!("BarcodeDetector" in window)) {
+    return;
+  }
+
+  try {
+    const supportedFormats = await window.BarcodeDetector.getSupportedFormats();
+    if (!supportedFormats.includes("qr_code")) {
+      return;
+    }
+
+    barcodeDetector = new window.BarcodeDetector({ formats: ["qr_code"] });
+    scheduleBarcodeDetection(readerElement);
+  } catch (error) {
+    barcodeDetector = null;
+    console.info("原生 QR Code 定位不可用，改用 html5-qrcode：", error);
+  }
+}
+
+function scheduleBarcodeDetection(readerElement) {
+  clearTimeout(barcodeDetectionTimer);
+  barcodeDetectionTimer = setTimeout(
+    () => detectQrCodePosition(readerElement),
+    100,
+  );
+}
+
+async function detectQrCodePosition(readerElement) {
+  if (!barcodeDetector || !isHtmlScannerRunning || isQrCodeDetected) {
+    return;
+  }
+
+  const video = readerElement.querySelector("video");
+  if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    scheduleBarcodeDetection(readerElement);
+    return;
+  }
+
+  try {
+    const detectedCodes = await barcodeDetector.detect(video);
+    const qrCode = detectedCodes.find((code) => code.rawValue);
+
+    if (qrCode) {
+      drawQrCodeOutline(readerElement, video, qrCode.cornerPoints);
+      await handleHtmlQrCodeDetected(qrCode.rawValue);
+      return;
+    }
+  } catch (error) {
+    console.info("QR Code 位置偵測暫時失敗：", error);
+  }
+
+  scheduleBarcodeDetection(readerElement);
+}
+
+function drawQrCodeOutline(readerElement, video, cornerPoints) {
+  if (!Array.isArray(cornerPoints) || cornerPoints.length < 4) {
+    showFallbackDetectedFrame();
+    return;
+  }
+
+  removeQrCodeOutline();
+
+  const readerRect = readerElement.getBoundingClientRect();
+  const videoRect = video.getBoundingClientRect();
+  const scale = Math.max(
+    videoRect.width / video.videoWidth,
+    videoRect.height / video.videoHeight,
+  );
+  const renderedWidth = video.videoWidth * scale;
+  const renderedHeight = video.videoHeight * scale;
+  const cropX = (renderedWidth - videoRect.width) / 2;
+  const cropY = (renderedHeight - videoRect.height) / 2;
+  const offsetX = videoRect.left - readerRect.left;
+  const offsetY = videoRect.top - readerRect.top;
+
+  const points = cornerPoints
+    .map((point) => {
+      const x = offsetX + point.x * scale - cropX;
+      const y = offsetY + point.y * scale - cropY;
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  overlay.id = "qr-detection-overlay";
+  overlay.setAttribute("viewBox", `0 0 ${readerRect.width} ${readerRect.height}`);
+
+  const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+  polygon.setAttribute("points", points);
+  overlay.appendChild(polygon);
+  readerElement.appendChild(overlay);
+}
+
+function showFallbackDetectedFrame() {
+  document.querySelector("#reader").classList.add("is-detected");
+}
+
+function removeQrCodeOutline() {
+  document.querySelector("#qr-detection-overlay")?.remove();
+  document.querySelector("#reader")?.classList.remove("is-detected");
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function getPreferredCamera(cameras) {
@@ -245,6 +377,11 @@ async function stopHtmlScanner(showStoppedMessage = true) {
 }
 
 async function clearHtmlScanner() {
+  clearTimeout(barcodeDetectionTimer);
+  barcodeDetectionTimer = null;
+  barcodeDetector = null;
+  removeQrCodeOutline();
+
   if (!html5QrCode) {
     return;
   }
@@ -266,11 +403,15 @@ function updateScannerButtons() {
 
 function setQrCodeValue(value) {
   state.qrCodeValue = String(value).trim();
-  elements.qrCodeValue.textContent = state.qrCodeValue || "尚未掃描";
+  renderQrCodeValue();
   showMessage(
     state.qrCodeValue ? "QR Code 掃描成功。" : "未讀取到 QR Code 內容。",
     !state.qrCodeValue,
   );
+}
+
+function renderQrCodeValue() {
+  elements.qrCodeValue.textContent = state.qrCodeValue || "尚未掃描";
 }
 
 async function submitData() {
