@@ -40,6 +40,10 @@ function bindEvents() {
 
 async function initLiff() {
   try {
+    if (typeof liff === "undefined") {
+      throw new Error("LIFF SDK 尚未載入，請確認 sdk.js 的 script URL");
+    }
+
     if (!LIFF_ID || LIFF_ID === "YOUR_LIFF_ID") {
       throw new Error("尚未在 config.js 設定有效的 LIFF_ID");
     }

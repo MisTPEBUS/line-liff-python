@@ -34,8 +34,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=frontend_origins,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -91,14 +91,14 @@ async def health_check() -> ApiResponse:
     status_code=status.HTTP_200_OK,
 )
 async def receive_qr_code(payload: QrCodeRequest) -> ApiResponse:
-    print("====================================")
-    print("收到 QR Code 資料")
-    print(f"LINE User ID: {payload.line_user_id}")
-    print(f"LINE Name: {payload.line_name}")
-    print(f"QR Code Value: {payload.qr_code_value}")
-    print("====================================")
+    try:
+        body = payload.model_dump(by_alias=True)
+        print(f"POST /api/qrcode body: {json.dumps(body, ensure_ascii=False)}")
 
-    return ApiResponse(status="success", message="資料接收成功")
+        return ApiResponse(status="success", message="資料接收成功")
+    except Exception as error:
+        print(f"POST /api/qrcode error message: {error}")
+        raise
 
 
 @app.post(
@@ -119,6 +119,4 @@ async def receive_line_webhook(payload: WebhookRequest) -> ApiResponse:
     print("====================================")
 
     return ApiResponse(status="success", message="Webhook 接收成功")
-
-
 
