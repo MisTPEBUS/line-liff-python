@@ -49,6 +49,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 - Health check：<http://127.0.0.1:8000/>
 - Swagger：<http://127.0.0.1:8000/docs>
+- LINE Webhook：`POST http://127.0.0.1:8000/webhook`
 
 ## 2. 設定與啟動 frontend
 
@@ -144,6 +145,14 @@ https://example-name.ngrok-free.app/
 https://example-name.ngrok-free.app/docs
 ```
 
+在 LINE Developers Console 的 Messaging API 頁面，將 Webhook URL 設為：
+
+```text
+https://example-name.ngrok-free.app/webhook
+```
+
+接著啟用 `Use webhook` 並按下 `Verify`。LINE 的驗證請求會使用空的 `events` 陣列，backend 仍會正常回傳 HTTP 200。
+
 免費 ngrok URL 可能在重新啟動後改變；變更後要同步更新 `frontend/config.js`。
 
 ## 5. 從 LINE LIFF 開啟本機 frontend
@@ -231,9 +240,26 @@ curl.exe -X POST "http://127.0.0.1:8000/api/qrcode" `
 }
 ```
 
+Webhook 空事件驗證測試：
+
+```powershell
+curl.exe -X POST "http://127.0.0.1:8000/webhook" `
+  -H "Content-Type: application/json" `
+  -d "{\"destination\":\"U123456789abcdef\",\"events\":[]}"
+```
+
+成功時回傳：
+
+```json
+{
+  "status": "success",
+  "message": "Webhook 接收成功"
+}
+```
+
 ## 8. POC 安全性限制
 
-目前 frontend 傳入的 `lineUserId` 與 `lineName` 未經後端驗證，只適合 POC，不可作為正式身分認證。
+目前 frontend 傳入的 `lineUserId` 與 `lineName` 未經後端驗證，只適合 POC，不可作為正式身分認證。`POST /webhook` 目前也只接收並顯示事件，尚未驗證 `x-line-signature`，不可直接用於正式環境或執行敏感操作。
 
 正式版本應由 frontend 傳送：
 
@@ -244,4 +270,4 @@ curl.exe -X POST "http://127.0.0.1:8000/api/qrcode" `
 }
 ```
 
-再由 backend 驗證 LINE ID Token 並取得可信任的 LINE User ID。本版本刻意不實作 Token 驗證、資料庫或 Authentication。
+再由 backend 驗證 LINE ID Token 並取得可信任的 LINE User ID。本版本刻意不實作 Token 驗證、Webhook Channel Secret 簽章驗證、資料庫或 Authentication。正式處理 LINE webhook 事件前，必須使用未經修改的原始 request body、Channel Secret 與 `x-line-signature` 驗證來源。
