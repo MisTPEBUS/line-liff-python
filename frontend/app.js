@@ -4,6 +4,7 @@ const LIFF_ID = window.APP_CONFIG.LIFF_ID;
 const API_URL = window.APP_CONFIG.API_URL;
 
 const state = {
+  liffInitialized: false,
   lineUserId: "",
   lineName: "",
   qrCodeValue: "",
@@ -52,14 +53,16 @@ async function initLiff() {
       liffId: LIFF_ID,
       withLoginOnExternalBrowser: true,
     });
+    state.liffInitialized = true;
 
     if (!liff.isLoggedIn()) {
-      liff.login({ redirectUri: window.location.href });
+      liff.login();
       return;
     }
 
     await loadLineProfile();
   } catch (error) {
+    state.liffInitialized = false;
     console.error("LIFF 初始化失敗：", error);
     elements.lineUserId.textContent = "取得失敗";
     elements.lineName.textContent = "取得失敗";
@@ -93,9 +96,25 @@ function renderLineProfile() {
 
 async function scanWithLiff() {
   try {
+    if (!state.liffInitialized || typeof liff === "undefined") {
+      const error = new Error("LIFF 尚未成功初始化");
+      console.error("LIFF QR Scanner 發生錯誤：", error);
+      showMessage("LIFF 尚未完成初始化，請重新整理後再試。", true);
+      return;
+    }
+
+    if (!liff.isLoggedIn()) {
+      const error = new Error("LIFF 尚未登入");
+      console.error("LIFF QR Scanner 發生錯誤：", error);
+      showMessage("請先登入 LINE。", true);
+      return;
+    }
+
     if (!liff.isApiAvailable("scanCodeV2")) {
+      const error = new Error("目前環境不支援 scanCodeV2");
+      console.error("LIFF QR Scanner 發生錯誤：", error);
       showMessage(
-        "目前環境不支援 LIFF QR Code 掃描，請改用 HTML Camera。",
+        "目前環境不支援 LINE LIFF QR Code 掃描，請改用 HTML Camera。",
         true,
       );
       return;
@@ -103,6 +122,7 @@ async function scanWithLiff() {
 
     const result = await liff.scanCodeV2();
     if (!result || !result.value) {
+      console.error("LIFF QR Scanner 發生錯誤：QR Code 沒有內容");
       showMessage("未讀取到 QR Code 內容。", true);
       return;
     }
@@ -110,7 +130,22 @@ async function scanWithLiff() {
     setQrCodeValue(result.value);
   } catch (error) {
     console.error("LIFF QR Scanner 發生錯誤：", error);
-    showMessage("LIFF 掃描未完成，請再試一次或改用 HTML Camera。", true);
+    const errorCode = error && typeof error === "object" ? error.code : "";
+    const errorName = error && typeof error === "object" ? error.name : "";
+    const errorMessage =
+      error instanceof Error ? error.message : String(error || "");
+    const isCancelled =
+      errorCode === "USER_CANCEL" ||
+      errorCode === "CANCEL" ||
+      errorName === "AbortError" ||
+      /cancel|取消/i.test(errorMessage);
+
+    showMessage(
+      isCancelled
+        ? "使用者取消 QR Code 掃描。"
+        : "LIFF Scanner 發生錯誤，QR Code 掃描失敗。",
+      true,
+    );
   }
 }
 
@@ -142,7 +177,7 @@ async function scanWithHtmlCamera() {
 
     const cameras = await Html5Qrcode.getCameras();
     if (!cameras.length) {
-      throw new DOMException("找不到可用的相機鏡頭", "NotFoundError");
+      throw new DOMException("找不到可使用的攝影機", "NotFoundError");
     }
 
     const preferredCamera = getPreferredCamera(cameras);
