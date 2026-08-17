@@ -6,11 +6,12 @@ const API_URL = window.APP_CONFIG.API_URL;
 const state = {
   lineUserId: "",
   lineName: "",
-  qrCodeValue: ""
+  qrCodeValue: "",
 };
 
 let html5QrCode = null;
 let isHtmlScannerRunning = false;
+let isQrCodeDetected = false;
 
 const elements = {};
 
@@ -43,7 +44,7 @@ async function initLiff() {
 
     await liff.init({
       liffId: LIFF_ID,
-      withLoginOnExternalBrowser: true
+      withLoginOnExternalBrowser: true,
     });
 
     if (!liff.isLoggedIn()) {
@@ -56,7 +57,10 @@ async function initLiff() {
     console.error("LIFF 初始化失敗：", error);
     elements.lineUserId.textContent = "取得失敗";
     elements.lineName.textContent = "取得失敗";
-    showMessage("LINE LIFF 初始化失敗，請確認設定並從 LINE 重新開啟頁面。", true);
+    showMessage(
+      "LINE LIFF 初始化失敗，請確認設定並從 LINE 重新開啟頁面。",
+      true,
+    );
   }
 }
 
@@ -84,7 +88,10 @@ function renderLineProfile() {
 async function scanWithLiff() {
   try {
     if (!liff.isApiAvailable("scanCodeV2")) {
-      showMessage("目前環境不支援 LIFF QR Code 掃描，請改用 HTML Camera。", true);
+      showMessage(
+        "目前環境不支援 LIFF QR Code 掃描，請改用 HTML Camera。",
+        true,
+      );
       return;
     }
 
@@ -122,6 +129,7 @@ async function scanWithHtmlCamera() {
 
     const readerElement = document.querySelector("#reader");
     readerElement.classList.add("is-scanning");
+    isQrCodeDetected = false;
 
     const cameras = await Html5Qrcode.getCameras();
     if (!cameras.length) {
@@ -129,27 +137,23 @@ async function scanWithHtmlCamera() {
     }
 
     const preferredCamera = getPreferredCamera(cameras);
-    html5QrCode = new Html5Qrcode("reader");
+    html5QrCode = new Html5Qrcode("reader", {
+      formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+      useBarCodeDetectorIfSupported: true,
+    });
     isHtmlScannerRunning = true;
     updateScannerButtons();
 
     await html5QrCode.start(
       preferredCamera.id,
       {
-        fps: 10,
+        fps: 15,
         aspectRatio: 1.333334,
-        qrbox: (viewfinderWidth, viewfinderHeight) => {
-          const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72);
-          return { width: size, height: size };
-        }
       },
-      async (decodedText) => {
-        setQrCodeValue(decodedText);
-        await stopHtmlScanner(false);
-      },
+      handleHtmlQrCodeDetected,
       () => {
         // 每一幀未辨識到 QR Code 是正常情況，不輸出 console error。
-      }
+      },
     );
 
     showMessage("相機已啟動，請將 QR Code 對準掃描框。", false);
@@ -164,16 +168,40 @@ async function scanWithHtmlCamera() {
   }
 }
 
+async function handleHtmlQrCodeDetected(decodedText) {
+  if (isQrCodeDetected) {
+    return;
+  }
+
+  const qrCodeValue = String(decodedText).trim();
+  if (!qrCodeValue) {
+    return;
+  }
+
+  isQrCodeDetected = true;
+  showMessage("已偵測到 QR Code，正在關閉相機...", false);
+
+  await stopHtmlScanner(false);
+  setQrCodeValue(qrCodeValue);
+}
+
 function getPreferredCamera(cameras) {
   const rearCameraPattern = /back|rear|environment|後|背面/i;
-  return cameras.find((camera) => rearCameraPattern.test(camera.label)) || cameras[cameras.length - 1];
+  return (
+    cameras.find((camera) => rearCameraPattern.test(camera.label)) ||
+    cameras[cameras.length - 1]
+  );
 }
 
 function getCameraErrorMessage(error) {
   const errorName = error && typeof error === "object" ? error.name : "";
-  const errorMessage = error instanceof Error ? error.message : String(error || "未知錯誤");
+  const errorMessage =
+    error instanceof Error ? error.message : String(error || "未知錯誤");
 
-  if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
+  if (
+    errorName === "NotAllowedError" ||
+    errorName === "PermissionDeniedError"
+  ) {
     return "無法啟動相機：相機權限被拒絕，請到手機設定允許 LINE 或瀏覽器使用相機。";
   }
 
@@ -185,7 +213,10 @@ function getCameraErrorMessage(error) {
     return "無法啟動相機：鏡頭可能正被其他 App 使用，請關閉其他相機程式後重試。";
   }
 
-  if (errorName === "OverconstrainedError" || errorName === "ConstraintNotSatisfiedError") {
+  if (
+    errorName === "OverconstrainedError" ||
+    errorName === "ConstraintNotSatisfiedError"
+  ) {
     return "無法啟動後置鏡頭：目前裝置不支援要求的相機設定。";
   }
 
@@ -236,7 +267,10 @@ function updateScannerButtons() {
 function setQrCodeValue(value) {
   state.qrCodeValue = String(value).trim();
   elements.qrCodeValue.textContent = state.qrCodeValue || "尚未掃描";
-  showMessage(state.qrCodeValue ? "QR Code 掃描成功。" : "未讀取到 QR Code 內容。", !state.qrCodeValue);
+  showMessage(
+    state.qrCodeValue ? "QR Code 掃描成功。" : "未讀取到 QR Code 內容。",
+    !state.qrCodeValue,
+  );
 }
 
 async function submitData() {
@@ -262,13 +296,13 @@ async function submitData() {
     const response = await fetch(`${baseUrl}/api/qrcode`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         lineUserId: state.lineUserId,
         lineName: state.lineName,
-        qrCodeValue: state.qrCodeValue
-      })
+        qrCodeValue: state.qrCodeValue,
+      }),
     });
 
     const responseText = await response.text();
@@ -283,7 +317,9 @@ async function submitData() {
     }
 
     if (!response.ok) {
-      const httpError = new Error(`API Request failed: ${response.status} ${response.statusText}`);
+      const httpError = new Error(
+        `API Request failed: ${response.status} ${response.statusText}`,
+      );
       httpError.response = responseData || responseText;
       throw httpError;
     }
