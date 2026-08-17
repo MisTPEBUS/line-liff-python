@@ -123,14 +123,21 @@ async function scanWithHtmlCamera() {
     const readerElement = document.querySelector("#reader");
     readerElement.classList.add("is-scanning");
 
+    const cameras = await Html5Qrcode.getCameras();
+    if (!cameras.length) {
+      throw new DOMException("找不到可用的相機鏡頭", "NotFoundError");
+    }
+
+    const preferredCamera = getPreferredCamera(cameras);
     html5QrCode = new Html5Qrcode("reader");
     isHtmlScannerRunning = true;
     updateScannerButtons();
 
     await html5QrCode.start(
-      { facingMode: "environment" },
+      preferredCamera.id,
       {
         fps: 10,
+        aspectRatio: 1.333334,
         qrbox: (viewfinderWidth, viewfinderHeight) => {
           const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72);
           return { width: size, height: size };
@@ -146,6 +153,7 @@ async function scanWithHtmlCamera() {
     );
 
     showMessage("相機已啟動，請將 QR Code 對準掃描框。", false);
+    readerElement.scrollIntoView({ behavior: "smooth", block: "center" });
   } catch (error) {
     console.error("HTML Camera 啟動失敗：", error);
     isHtmlScannerRunning = false;
@@ -154,6 +162,11 @@ async function scanWithHtmlCamera() {
     updateScannerButtons();
     showMessage(getCameraErrorMessage(error), true);
   }
+}
+
+function getPreferredCamera(cameras) {
+  const rearCameraPattern = /back|rear|environment|後|背面/i;
+  return cameras.find((camera) => rearCameraPattern.test(camera.label)) || cameras[cameras.length - 1];
 }
 
 function getCameraErrorMessage(error) {

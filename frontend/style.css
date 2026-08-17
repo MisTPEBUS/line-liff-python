@@ -142,7 +142,9 @@ button:disabled {
 }
 
 #reader.is-scanning {
+  position: relative;
   min-height: 280px;
+  border: 2px solid #06c755;
   background: #111;
 }
 
@@ -158,6 +160,17 @@ button:disabled {
   aspect-ratio: 4 / 3;
   object-fit: cover;
   border-radius: 12px;
+}
+
+#reader.is-scanning::after {
+  position: absolute;
+  inset: 14% 12%;
+  z-index: 2;
+  border: 3px solid #06c755;
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 18%);
+  content: "";
+  pointer-events: none;
 }
 
 .qr-value {
