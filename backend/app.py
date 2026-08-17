@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Annotated
 
@@ -64,6 +65,21 @@ class ApiResponse(BaseModel):
     message: str
 
 
+class WebhookEvent(BaseModel):
+    """允許 LINE 未來加入新欄位，避免非破壞性更新造成驗證失敗。"""
+
+    model_config = ConfigDict(extra="allow")
+
+    type: NonBlankString
+
+
+class WebhookRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    destination: NonBlankString
+    events: list[WebhookEvent]
+
+
 @app.get("/", response_model=ApiResponse, status_code=status.HTTP_200_OK)
 async def health_check() -> ApiResponse:
     return ApiResponse(status="success", message="LINE LIFF QR Code API")
@@ -84,4 +100,28 @@ async def receive_qr_code(payload: QrCodeRequest) -> ApiResponse:
 
     return ApiResponse(status="success", message="資料接收成功")
 
+
+@app.post(
+    "/webhook",
+    response_model=ApiResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def receive_line_webhook(payload: WebhookRequest) -> ApiResponse:
+    print("====================================")
+    print("收到 LINE Webhook")
+    print(f"Destination: {payload.destination}")
+    print(f"Event Count: {len(payload.events)}")
+
+    for index, event in enumerate(payload.events, start=1):
+        event_data = event.model_dump(by_alias=True)
+        print(f"Event {index}: {json.dumps(event_data, ensure_ascii=False)}")
+
+    print("====================================")
+
+    return ApiResponse(status="success", message="Webhook 接收成功")
+
+
+# POC 安全性說明：目前 QR Code API 的使用者資料及 Webhook 來源皆未驗證。
+# 正式版本處理事件前，必須使用未經修改的原始 request body、
+# LINE Channel Secret 與 x-line-signature 驗證 Webhook 來源。
 
